@@ -39,7 +39,6 @@ class Product(models.Model):
 
     price = models.DecimalField(max_digits=10, decimal_places=2)
     stock = models.PositiveIntegerField(default=0)
-
     #Image field
     image = models.ImageField(upload_to = 'products/', blank = True, null = True)
 
@@ -48,8 +47,16 @@ class Product(models.Model):
     updated_at = models.DateTimeField(auto_now = True)
 
     def save(self, *args, **kwargs):
+        # 1. If slug is missing, create one from the name
         if not self.slug:
             self.slug = slugify(self.name)
+
+        original_slug = self.slug
+        counter = 1
+        # Loop until we find a slug that doesn't exist
+        while Product.objects.filter(slug=self.slug).exclude(pk=self.pk).exists():
+            self.slug = f"{original_slug}-{counter}"
+            counter += 1
         super().save(*args, **kwargs)
 
     def __str__(self):
