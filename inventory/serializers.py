@@ -32,14 +32,14 @@ class OrderItemSerializer(serializers.ModelSerializer):
     product_id = serializers.PrimaryKeyRelatedField(
         queryset = Product.objects.all(),
         source = 'product',
-        write_only = True
+
     )
     product_name = serializers.CharField(source = 'product.name',read_only = True )
     product_price = serializers.DecimalField(source='prodcut.price',max_digits = 10, decimal_places = 2, read_only=True )
 
     class Meta:
         model = OrderItem
-        fields = ['product_id','prodcut_name','product_price','quantity','items']
+        fields = ['product_id','product_name','product_price','quantity','total_cost']
     
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True)
@@ -53,28 +53,31 @@ class OrderSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         items_data = validated_data.pop('items')
 
+        #Safty Fix
+        validated_data.pop('customer', None)
+
         #Logged-in user
         user = self.context['request'].user
 
         #Uses atomic transaction: If anything fails inside here, undo everything
         with transaction.atomic():
             #Create the order "Header"
-            order = Order.onjects.create(customer=user,**validated_data)
+            order = Order.objects.create(customer=user,**validated_data)
 
             #Create item one by one using loop
             for item_data in items_data:
                 product = item_data['product']
-                if product.stock < item_data['quantity']:
+                if int(product.stock) < int(item_data['quantity']):
                     raise serializers.ValidationError(f"Not enough stock for {product.name}")
                 
-                OrderItem.Objects.create(
+                OrderItem.objects.create(
                     order = order,
                     product=product,
                     quantity=item_data['quantity'],
                     price_at_purchase=product.price
                 )
 
-                product.stock -=item_data['quantity']
+                product.stock = int(product.stock)-int(item_data['quantity'])
                 product.save()
             
         return order
