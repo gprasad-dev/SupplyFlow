@@ -1,6 +1,6 @@
 from rest_framework import viewsets, permissions
-from .models import Category, Product
-from .serializers import CategorySerializer, ProductSerializer
+from .models import Category, Product, Order
+from .serializers import CategorySerializer, ProductSerializer, OrderSerializer
 
 class CategoryViewSet(viewsets.ModelViewSet):
     """
@@ -24,5 +24,16 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
 
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+class OrderViewSet(viewsets.ModelViewSet):
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    # It will only show the user orders
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'admin':
+            return Order.objects.all()
+        return Order.objects.filter(customer=user) #Customer see their own
 
 

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Category, Product, Order, OrderItem
+from django.db import transaction
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -27,5 +28,56 @@ class ProductSerializer(serializers.ModelSerializer):
         validated_data['vendor'] = user
         return super().create(validated_data)
     
+class OrderItemSerializer(serializers.ModelSerializer):
+    product_id = serializers.PrimaryKeyRelatedField(
+        queryset = Product.objects.all(),
+        source = 'product',
+        write_only = True
+    )
+    product_name = serializers.CharField(source = 'product.name',read_only = True )
+    product_price = serializers.DecimalField(source='prodcut.price',max_digits = 10, decimal_places = 2, read_only=True )
+
+    class Meta:
+        model = OrderItem
+        fields = ['product_id','prodcut_name','product_price','quantity','items']
+    
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True)
+
+    class Meta:
+        model = Order
+        fields = ['id','customer','status','created_at','is_paid','total_price','items']
+        read_only_fiels = ['customer','status','created_at','total_price']
+
+    # Overrided create method to handel the nested items 
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+
+        #Logged-in user
+        user = self.context['request'].user
+
+        #Uses atomic transaction: If anything fails inside here, undo everything
+        with transaction.atomic():
+            #Create the order "Header"
+            order = Order.onjects.create(customer=user,**validated_data)
+
+            #Create item one by one using loop
+            for item_data in items_data:
+                product = item_data['product']
+                if product.stock < item_data['quantity']:
+                    raise serializers.ValidationError(f"Not enough stock for {product.name}")
+                
+                OrderItem.Objects.create(
+                    order = order,
+                    product=product,
+                    quantity=item_data['quantity'],
+                    price_at_purchase=product.price
+                )
+
+                product.stock -=item_data['quantity']
+                product.save()
+            
+        return order
+        
     
     
